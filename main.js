@@ -41,7 +41,7 @@ ipcMain.handle('ping-server', async (event, ipAddress) => {
 
 ipcMain.on('connect-v2ray', () => {
   const configPath = path.join(__dirname, 'config.json');
-  const binary = process.platform === 'win32' ? 'v2ray.exe' : './v2ray';
+  const binary = process.platform === 'win32' ? 'xray.exe' : 'xray';
   const v2ray = spawn(binary, ['-config', configPath]);
 
   v2ray.stdout.on('data', data => console.log(`stdout: ${data}`));
