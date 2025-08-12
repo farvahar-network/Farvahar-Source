@@ -13,20 +13,16 @@ interface AuthenticatedSocket extends Socket {
 export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) {
   console.log(`User ${socket.username} (${socket.userId}) connected`)
 
-  // Update user status to online
   UserService.updateUserStatus(socket.userId, "online")
 
-  // Join user to their servers
   const userServers = UserService.getUserServers(socket.userId)
   userServers.forEach((serverId) => {
     socket.join(`server:${serverId}`)
   })
 
-  // Handle joining channels
   socket.on("join-channel", (data: { channelId: string; serverId: string }) => {
     const { channelId, serverId } = data
 
-    // Verify user has access to this server/channel
     if (!userServers.includes(serverId)) {
       socket.emit("error", { message: "Access denied to this server" })
       return
@@ -35,14 +31,12 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     socket.join(`channel:${channelId}`)
     console.log(`${socket.username} joined channel ${channelId}`)
 
-    // Notify others in channel
     socket.to(`channel:${channelId}`).emit("user-joined-channel", {
       userId: socket.userId,
       username: socket.username,
     })
   })
 
-  // Handle leaving channels
   socket.on("leave-channel", (channelId: string) => {
     socket.leave(`channel:${channelId}`)
     socket.to(`channel:${channelId}`).emit("user-left-channel", {
@@ -50,7 +44,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     })
   })
 
-  // Handle sending messages
   socket.on(
     "send-message",
     async (data: {
@@ -60,18 +53,14 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
       attachments?: Array<{ id: string; filename: string; url: string; size: number; type: string }>
     }) => {
       try {
-        // Validate message
         const validation = validateMessage(data.content)
         if (!validation.success) {
           socket.emit("error", { message: "Invalid message content" })
           return
         }
 
-        // Sanitize content
         const sanitizedContent = sanitizeInput(data.content)
 
-        // Check if user has access to this channel
-        if (!userServers.includes(data.serverId)) {
           socket.emit("error", { message: "Access denied to this server" })
           return
         }
@@ -85,7 +74,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
           attachments: data.attachments || [],
         })
 
-        // Add author info
         const author = await UserService.findById(socket.userId)
         const messageWithAuthor = {
           ...message,
@@ -97,7 +85,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
           },
         }
 
-        // Broadcast to channel
         io.to(`channel:${data.channelId}`).emit("new-message", messageWithAuthor)
       } catch (error) {
         console.error("Send message error:", error)
@@ -106,7 +93,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     },
   )
 
-  // Handle typing indicators
   socket.on("typing-start", (channelId: string) => {
     socket.to(`channel:${channelId}`).emit("user-typing", {
       userId: socket.userId,
@@ -122,7 +108,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     })
   })
 
-  // Handle message reactions
   socket.on(
     "add-reaction",
     async (data: {
@@ -182,7 +167,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     },
   )
 
-  // Handle message deletion
   socket.on(
     "delete-message",
     async (data: {
@@ -203,10 +187,8 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     },
   )
 
-  // Handle voice channel operations
   socket.on("join-voice", async (data: { channelId: string; serverId: string }) => {
     try {
-      // Verify access
       if (!userServers.includes(data.serverId)) {
         socket.emit("error", { message: "Access denied to this server" })
         return
@@ -215,10 +197,8 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
       await VoiceService.joinVoiceChannel(socket.userId, data.channelId, data.serverId)
       socket.join(`voice:${data.channelId}`)
 
-      // Get user info
       const user = await UserService.findById(socket.userId)
 
-      // Notify others in voice channel
       socket.to(`voice:${data.channelId}`).emit("user-joined-voice", {
         userId: socket.userId,
         username: socket.username,
@@ -226,7 +206,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
         avatar: user?.avatar,
       })
 
-      // Send current voice channel members
       const members = await VoiceService.getVoiceChannelMembers(data.channelId)
       socket.emit("voice-channel-members", members)
     } catch (error) {
@@ -247,7 +226,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     }
   })
 
-  // WebRTC signaling for voice
   socket.on("webrtc-offer", (data: { to: string; offer: any; channelId: string }) => {
     socket.to(`voice:${data.channelId}`).emit("webrtc-offer", {
       from: socket.userId,
@@ -272,7 +250,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     })
   })
 
-  // Handle voice state updates
   socket.on(
     "update-voice-state",
     async (data: {
@@ -297,12 +274,10 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     },
   )
 
-  // Handle user status updates
   socket.on("update-status", async (status: "online" | "idle" | "dnd" | "offline") => {
     try {
       await UserService.updateUserStatus(socket.userId, status)
 
-      // Broadcast to all servers the user is in
       userServers.forEach((serverId) => {
         socket.to(`server:${serverId}`).emit("user-status-updated", {
           userId: socket.userId,
@@ -314,14 +289,11 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
     }
   })
 
-  // Handle disconnect
   socket.on("disconnect", async (reason) => {
     console.log(`User ${socket.username} disconnected: ${reason}`)
 
-    // Update user status to offline
     await UserService.updateUserStatus(socket.userId, "offline")
 
-    // Leave all voice channels
     const voiceChannels = await VoiceService.getUserVoiceChannels(socket.userId)
     for (const channelId of voiceChannels) {
       await VoiceService.leaveVoiceChannel(socket.userId, channelId)
@@ -330,7 +302,6 @@ export function handleSocketConnection(io: Server, socket: AuthenticatedSocket) 
       })
     }
 
-    // Broadcast status update to servers
     userServers.forEach((serverId) => {
       socket.to(`server:${serverId}`).emit("user-status-updated", {
         userId: socket.userId,
