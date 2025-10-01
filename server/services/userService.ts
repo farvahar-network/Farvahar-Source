@@ -201,7 +201,7 @@ export class UserService {
 
     if (userIndex !== -1 && !users[userIndex].blockedUsers.includes(blockedUserId)) {
       users[userIndex].blockedUsers.push(blockedUserId)
-      // Remove from friends if they were friends
+      // Remove from friends if they were friends Type friend Of or like block them
       users[userIndex].friends = users[userIndex].friends.filter((id) => id !== blockedUserId)
       this.saveUsers(users)
     }
